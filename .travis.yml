@@ -1,3 +1,4 @@
+#
 language: rust
 rust:
   - 1.24.0
