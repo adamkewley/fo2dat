@@ -1,27 +1,31 @@
 # fo2dat
 
-A file archiver for Fallout2 DAT files
-
-
-**DOES NOT WORK**:
-- It's a rust learning exercise
-- I generally learn languages by implementing data/protocol specs
-- It's focused on structuring, building, and deploying a simple Rust application so I
-  can see how the overall pipeline (not just the lang) would fit into my interests.
-- I usually write documentation before the application; therefore, ignore the
-  documentation for now
+A file archiver for Fallout 2 "DAT2" files
 
 
 # Usage
 
-Ripped from `tar`, because devs are already familiar and `7z` has a more complicated
-CLI.
-
-```bash
-fo2dat -cf master.dat master/*  # create master.dat from files in master/
-fo2dat -tvf master.dat          # list all files in master.dat
-fo2dat -xf master.dat           # extract files from master.dat
 ```
+# show help
+$ fo2dat --help
+
+# list contents of master.dat
+$ fo2dat -tf master.dat
+
+# extract master.dat into current dir
+$ fo2dat -xf master.dat
+
+# extract master.dat into fo2/
+$ mkdir fo2
+$ fo2dat -xf master.dat -C fo2
+```
+
+**Note**:
+- This utility will decompresses zlib-compressed files when it can; however, typical Fallout 2
+  DAT2 files contain erroneous compression flags etc. When `fo2dat` cannot be certain that a
+  file is compressed, it skips decompression
+- Most Fallout2 DAT2 files contain duplicate entries, `fo2dat` skips duplicates as they are
+  encountered (i.e. first instance of an entry is extracted, 2nd does not overwrite)
 
 
 # DAT Spec
@@ -71,6 +75,7 @@ fo2dat -xf master.dat           # extract files from master.dat
   `tree_entry` in `tree_entries`
 - A file's data MAY use zlib compression, which is indicated by its first two bytes
   having the zlib magic number: `0x78da`
+- Some DAT files appear to contain duplicate entries
 
 
 ## `tree_entries`
@@ -110,18 +115,6 @@ fo2dat -xf master.dat           # extract files from master.dat
   `offset` and ending at `offset + packed_size`
 - `is_compressed` can have a value of either `0x0` (uncompressed) or `0x1`
   (compressed)
-- In C:
-
-```C
-struct tree_entry {
-    uint32_t filename_len;
-    char     filename[filename_len];
-    uint8_t  is_compressed;
-    uint32_t decompressed_size;
-    uint32_t packed_size;
-    uint32_t offset;
-};
-```
 
 
 Sources:

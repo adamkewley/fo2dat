@@ -1,5 +1,6 @@
 extern crate memmap;
 extern crate byteorder;
+extern crate flate2;
 
 use std::io;
 use std::path::Path;
@@ -9,14 +10,15 @@ use byteorder::{LittleEndian, ByteOrder};
 use std::str;
 use std::path::PathBuf;
 use std::io::Write;
+use flate2::read::ZlibDecoder;
 
-const NUM_FOOTER_BYTES: usize = 8;
-const DAT_FILE_MIN_SIZE: usize = NUM_FOOTER_BYTES;
+const DAT_FILE_FOOTER_BYTES: usize = 8;
+const DAT_FILE_MIN_SIZE: usize = DAT_FILE_FOOTER_BYTES;
+
 const TREE_ENTRY_HEADER_SIZE: usize = 4;
 const TREE_ENTRY_FOOTER_SIZE: usize = 13;
-const TREE_ENTRY_MIN_SIZE: usize =
-    TREE_ENTRY_HEADER_SIZE + TREE_ENTRY_FOOTER_SIZE;
-const PATH_SEPARATOR: char = '\\';
+const TREE_ENTRY_MIN_SIZE: usize = TREE_ENTRY_HEADER_SIZE + TREE_ENTRY_FOOTER_SIZE;
+const TREE_ENTRY_PATH_SEPARATOR: char = '\\';
 
 #[derive(Debug)]
 pub struct TreeEntry {
@@ -83,7 +85,7 @@ pub fn read_tree_entry(data: &[u8]) -> io::Result<(TreeEntry, usize)> {
     let filename = match  str::from_utf8(&data[TREE_ENTRY_HEADER_SIZE + 1..filename_len]) {
         Ok(s) => {
             let mut filename = PathBuf::new();
-            for el in s.split(PATH_SEPARATOR) {
+            for el in s.split(TREE_ENTRY_PATH_SEPARATOR) {
                 filename.push(el);
             }
             Ok(filename)
@@ -155,7 +157,7 @@ fn find_entries(dat_file: &[u8]) -> io::Result<TreeEntryIterator> {
     let tree_size =
         LittleEndian::read_u32(&dat_file[len-8..len-4]) as usize;
 
-    if tree_size + NUM_FOOTER_BYTES > file_size {
+    if tree_size + DAT_FILE_FOOTER_BYTES > file_size {
         let err_kind = std::io::ErrorKind::InvalidData;
         let err_msg = format!("size on disk ({}) is too small to fit the tree data ({}) plus footers", len, tree_size);
         let err = std::io::Error::new(err_kind, err_msg);
@@ -163,7 +165,7 @@ fn find_entries(dat_file: &[u8]) -> io::Result<TreeEntryIterator> {
     }
 
     let tree_entries_data =
-        &dat_file[len-tree_size-4..len-NUM_FOOTER_BYTES];
+        &dat_file[len-tree_size-4..len-DAT_FILE_FOOTER_BYTES];
 
     Ok(read_tree_entries(tree_entries_data))
 }
@@ -195,8 +197,8 @@ pub fn extract(dat_path: &str, output_path: &str) -> io::Result<()> {
     }
 }
 
-fn extract_entry(dat_data: &[u8], output_dir: &Path, entry: TreeEntry) -> io::Result<()> {
-    let dat_data = if entry.offset > dat_data.len() {
+fn get_data_slice_for_entry<'a>(dat_data: &'a[u8], entry: &TreeEntry) -> io::Result<&'a[u8]> {
+    if entry.offset > dat_data.len() {
         let err_kind = std::io::ErrorKind::InvalidData;
         let err_msg = format!("{}: start offset ({}) is outside of the data's bounds", entry.filename.to_str().unwrap(), entry.offset);
         let err = std::io::Error::new(err_kind, err_msg);
@@ -208,22 +210,52 @@ fn extract_entry(dat_data: &[u8], output_dir: &Path, entry: TreeEntry) -> io::Re
         Err(err)
     } else {
         Ok(&dat_data[entry.offset..entry.offset+entry.packed_size])
-    }?;
+    }
+}
 
+fn extract_entry(dat_data: &[u8], output_dir: &Path, entry: TreeEntry) -> io::Result<()> {
+    let dat_data = get_data_slice_for_entry(&dat_data, &entry)?;
     let output_path = output_dir.join(&entry.filename);
 
     if let Some(parent) = output_path.parent() {
-        std::fs::create_dir_all(parent)?;
-        println!("{}", parent.to_str().unwrap());
+        if !parent.exists() {
+            std::fs::create_dir_all(parent)?;
+            println!("{}", parent.to_str().unwrap());
+        }
     }
 
     if output_path.exists() {
-        println!("{}: already exists: skipping", output_path.to_str().unwrap());
+        eprintln!("{}: already exists: skipping", output_path.to_str().unwrap());
     } else {
-        let mut output_file = std::fs::File::create(&output_path)?;
-        println!("{}", output_path.to_str().unwrap());
+        write_entry(&dat_data, &output_path, &entry)?;
+    }
+
+    Ok(())
+}
+
+fn write_entry(dat_data: &[u8], output_path: &Path, entry: &TreeEntry) -> io::Result<()> {
+    let mut output_file = std::fs::File::create(&output_path)?;
+    println!("{}", output_path.to_str().unwrap());
+
+    if entry.is_compressed {
+        write_compressed_entry(&dat_data, output_file, &entry);
+    } else {
         output_file.write(dat_data)?;
     }
 
+    Ok(())
+}
+
+fn write_compressed_entry(dat_data: &[u8], mut output_file: File, entry: &TreeEntry) -> io::Result<()> {
+    if dat_data.len() < 2 {
+        eprintln!("{}: smaller than 2 bytes but marked as 'compressed' skipping decompression", entry.filename.to_str().unwrap());
+        output_file.write(dat_data)?;
+    } else if dat_data[0] != 0x78 || dat_data[1] != 0xda {
+        eprintln!("{}: marked as compressed but no magic number: not decompressing", entry.filename.to_str().unwrap());
+        output_file.write(dat_data)?;
+    } else {
+        let mut zlib_reader = ZlibDecoder::new(dat_data);
+        std::io::copy(&mut zlib_reader, &mut output_file)?;
+    }
     Ok(())
 }

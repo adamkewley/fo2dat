@@ -58,7 +58,7 @@ fn main() {
 }
 
 fn print_and_die(s: &str, exit_code: i32) {
-    println!("{}: {}", APP_NAME, s);
-    println!("Try '{} --help' for more information", APP_NAME);
+    eprintln!("{}: {}", APP_NAME, s);
+    eprintln!("Try '{} --help' for more information", APP_NAME);
     std::process::exit(exit_code);
 }
