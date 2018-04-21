@@ -23,17 +23,37 @@ pub struct TreeEntry {
     offset: u32,
 }
 
-pub fn read_tree_entries(data: &[u8]) -> io::Result<Vec<TreeEntry>> {
-    let mut offset: usize = 0;
-    let mut ret = Vec::new();
+pub struct TreeEntryIterator<'a> {
+    data: &'a [u8],
+    offset: usize,
+}
 
-    while offset < data.len() {
-        let (entry, entry_size) = read_tree_entry(&data[offset..])?;
-        ret.push(entry);
-        offset += entry_size;
+impl <'a> Iterator for TreeEntryIterator<'a> {
+    type Item = io::Result<TreeEntry>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.offset >= self.data.len() {
+            return None
+        }
+
+        match  read_tree_entry(&self.data[self.offset..]) {
+            Ok((entry, entry_size)) => {
+                self.offset += entry_size;
+                Some(Ok(entry))
+            },
+            Err(e) => {
+                self.offset = std::usize::MAX; // makes next iter ret None
+                Some(Err(e))
+            }
+        }
     }
+}
 
-    Ok(ret)
+pub fn read_tree_entries(data: &[u8]) -> TreeEntryIterator {
+    TreeEntryIterator {
+        data,
+        offset: 0,
+    }
 }
 
 pub fn read_tree_entry(data: &[u8]) -> io::Result<(TreeEntry, usize)> {
@@ -121,10 +141,13 @@ pub fn run(dat_path_str: &String) -> io::Result<()> {
     let tree_entries_data =
         &dat_file[len-tree_size-4..len-NUM_FOOTER_BYTES];
 
-    let tree_entries = read_tree_entries(tree_entries_data)?;
+    let tree_entries = read_tree_entries(tree_entries_data);
 
-    for tree_entry in &tree_entries {
-        println!("{}", tree_entry.filename);
+    for tree_entry in tree_entries {
+        match tree_entry {
+            Ok(entry) => println!("{}", entry.filename),
+            Err(e) => println!("{}", e),
+        }
     }
 
     Ok(())
