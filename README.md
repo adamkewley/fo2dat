@@ -1,9 +1,29 @@
 # fo2dat
 
-Fallout 2 DAT extractor: created as a rust learning exercise
+A file archiver for Fallout2 DAT files
 
 
-# Spec
+**DOES NOT WORK**:
+- It's a rust learning exercise
+- It's focused on structuring, building, and deploying a simple Rust application so I
+  can see how the overall pipeline (not just the lang) would fit into my interests.
+- I usually write documentation before the application; therefore, ignore the
+  documentation for now
+
+
+# Usage
+
+Ripped from `tar`, because devs are already familiar and `7z` has a more complicated
+CLI.
+
+```bash
+fo2dat -cf master.dat master/*  # create master.dat from files in master/
+fo2dat -tvf master.dat          # list all files in master.dat
+fo2dat -xf master.dat           # extract files from master.dat
+```
+
+
+# DAT Spec
 
 
 ## `dat_file`
