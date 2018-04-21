@@ -22,8 +22,8 @@ $ fo2dat -xf master.dat -C fo2
 
 **Note**:
 - This utility will decompresses zlib-compressed files when it can; however, typical Fallout 2
-  DAT2 files contain erroneous compression flags etc. When `fo2dat` cannot be certain that a
-  file is compressed, it skips decompression
+  DAT2 files contain erroneous compression flags. When `fo2dat` cannot be certain that a file is
+  compressed, it skips decompression
 - Most Fallout2 DAT2 files contain duplicate entries, `fo2dat` skips duplicates as they are
   encountered (i.e. first instance of an entry is extracted, 2nd does not overwrite)
 
