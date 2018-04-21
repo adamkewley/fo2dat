@@ -50,6 +50,10 @@ fn print_hexdump<I>(iter: I)
         .enumerate()
         .take(50)
         .for_each(|(i, hex)| {
+            if i % 2 == 0 {
+                print!(" ")
+            }
+
             if i % 5 == 0 {
                 println!("{}", hex);
             } else {
