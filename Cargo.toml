@@ -4,3 +4,5 @@ version = "0.1.0"
 authors = ["Adam Kewley <contact@adamkewley.com>"]
 
 [dependencies]
+memmap = "0.6.2"
+byteorder = "1.2.2"

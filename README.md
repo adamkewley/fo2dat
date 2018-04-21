@@ -5,6 +5,7 @@ A file archiver for Fallout2 DAT files
 
 **DOES NOT WORK**:
 - It's a rust learning exercise
+- I generally learn languages by implementing data/protocol specs
 - It's focused on structuring, building, and deploying a simple Rust application so I
   can see how the overall pipeline (not just the lang) would fit into my interests.
 - I usually write documentation before the application; therefore, ignore the
