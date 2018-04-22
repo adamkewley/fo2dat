@@ -1,29 +1,24 @@
----
-
 language: rust
 rust:
-  - 1.24.0
-
+- 1.24.0
 before_install:
-- sudo apt-get install mingw-w64   # cross-compile Linux -> Windows
-- mv cargo-config ~/.cargo/config  # linker+ar config for windows targets
+- sudo apt-get install mingw-w64
+- mv cargo-config ~/.cargo/config
 - rustup target install x86_64-pc-windows-gnu
 - rustup target install i686-pc-windows-gnu
-
 script:
 - cargo build --release --target x86_64-unknown-linux-gnu
 - cargo build --release --target x86_64-pc-windows-gnu
-- echo 'panic = "abort"' >> Cargo.toml  # HACK: due to win32 exceptions: see ./cargo-config
+- echo 'panic = "abort"' >> Cargo.toml
 - cargo build --release --target i686-pc-windows-gnu
-
 before_deploy:
 - mv target/i686-pc-windows-gnu/release/fo2dat.exe target/i686-pc-windows-gnu/release/fo2dat-i686.exe
-
 deploy:
   provider: releases
   on:
     tags: true
-  api_key: XG8t2edBcg/NzcmOH0U+oNy7kfl1oc+iyObsuFpP9DkMzkZcNJYvbDga67EAyOD4cleYQdY+i6W0aOPcdZaHsP88ryP+GdxvQz7RoLvkMFkiefpHcZVW52Uvx2ZnaayannCuL44oB5G0s3KsaT4BwtjTXeq6dZmuZqBPR74j4psI2isl0nH7E9eaOkkxzJRQbHApf9pUpQka8zDdmt3ZaQpFePeBHyGxkC1fXFZkYzCPSRnk2yxQVr7nQHUbwBqVdf2GIVKwJfxIwdCTbmlYRDd4K/bG3dCY5a7mkxhXBOGYRzfwwNzTx61XwaxVqNZgFrXLiqX3dOwba618n3KPDJbAEkJ58t1cOANsMjahj+xiF+G77LR/Tro04+nWxTt7owchptkqwaoL7WnrgJ4EqmTEoob6B1QuiSCoKBvmDq+PfyWCtkQUXrSJ2wPpu8y54MeqINL4b9oHd/juNPDvLfcnceRdKoOP/qTNwzUa7QOpKj4waLvMhAqxW9nKHGSpm96TPyPXvYFwcrJrbfIhMHpUZNlgLlfql70QNWrASE4INO228Y0FeQN4ne7965u5vD7n/KcHvia8HkUeewtJ5XfEUkdd8yp2/JBbcK/2r5jCfwf0bJzgMRnrIuetYAAcxHry9vgOCWZ+NIdi+s4XjH6Mh6zJphOUrs9+dlUI0z0=
+  api_key:
+    secure: JS/0YLbG+A1X+Ig0Ed8DlWWzE4dOa9Ijbw22GmqGma2cxWvzUbT4PTkqs5th2UwgUMcFe6NuvDuPlIWbSF7T2UyzScGnZQkrLaWifdcfdVG5orQqZpQJ8nZdf98RMSVD9KzS9bcDJzmadW/MXWsX0xIgwA+CicPIS1YL2fAyg+vo+d9BEZd5dCD01tzbjJcgLIJ+9Bdu2N6pSrXqocrozpK2EeTmkZeKqDtSc7tmzMPJ3oK3GfB3GekG5OXtGaYq1U6Z1P/3BZjZeADbeThinO2QZ3l28gtPlmrZV6dgiSbeB0/DGwW9wQrTZNX53vhuwXaABPL4zagdcy4d4nOmP+MXAE/vLwpJ98t7zAKje+CneafKZOmBJp5oytfwbV13iF6WWXEovPOHzClByetyKYa6mmxGNCl4/32KYCIgD4LKB0UBOI8pGWxeGrVXQ9YCzdLJsv5PIXTwSELn2hycTEcKTHmc4V4ash9Qrn2X3pHowtrWsqaxZ1TuFZKXtNHw8TUq4D1BpkxY985Pik/oVWRfcFg5tWBoDmlk28kP41rcGdVOTfSdxOeoRJnOTPdTlnCiGNPT9plIxLzgc3bt+Fwt00ELqHx2Jda7FvKJRLSofMHIJzzrrDfjP2O2PsebhrfT9rIC58o/tR//jdvrKH3wi5CfL9WeRdQhNpVLIDk=
   skip_cleanup: true
   file:
   - target/x86_64-unknown-linux-gnu/release/fo2dat
