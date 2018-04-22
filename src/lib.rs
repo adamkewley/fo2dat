@@ -238,7 +238,7 @@ fn write_entry(dat_data: &[u8], output_path: &Path, entry: &TreeEntry) -> io::Re
     println!("{}", output_path.to_str().unwrap());
 
     if entry.is_compressed {
-        write_compressed_entry(&dat_data, output_file, &entry);
+        write_compressed_entry(&dat_data, output_file, &entry)?;
     } else {
         output_file.write(dat_data)?;
     }
