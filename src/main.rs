@@ -48,7 +48,7 @@ fn main() {
         if let Err(e) = fo2dat::list_contents(maybe_file.unwrap()) {
             print_and_die(e.description(), 1);
         }
-    } else if should_list {
+    } else if should_extract {
         let cwd = env::current_dir().unwrap();
         let output_path = matches.value_of("directory").unwrap_or(cwd.to_str().unwrap());
         if let Err(e) = fo2dat::extract(maybe_file.unwrap(), output_path) {

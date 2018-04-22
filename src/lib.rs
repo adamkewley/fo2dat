@@ -173,8 +173,10 @@ fn find_entries(dat_file: &[u8]) -> io::Result<TreeEntryIterator> {
         return Err(err);
     }
 
-    let tree_entries_data =
-        &dat_file[len-tree_size-4..len-DAT_FILE_FOOTER_BYTES];
+    let tree_entries_start = len - tree_size - 4;
+    let tree_entries_end = len - DAT_FILE_FOOTER_BYTES;
+
+    let tree_entries_data = &dat_file[tree_entries_start..tree_entries_end];
 
     Ok(read_tree_entries(tree_entries_data))
 }
@@ -235,40 +237,22 @@ fn extract_entry(dat_data: &[u8], output_dir: &Path, entry: TreeEntry) -> io::Re
     if output_path.exists() {
         eprintln!("{}: already exists: skipping", output_path.to_str().unwrap());
     } else {
-        write_entry(&entry_data, &output_path, &entry)?;
+        write_entry(&entry_data, &output_path)?;
     }
 
     Ok(())
 }
 
-fn write_entry(entry_data: &[u8], output_path: &Path, entry: &TreeEntry) -> io::Result<()> {
-    if entry.is_compressed {
-        write_compressed_entry(&entry_data, &output_path, &entry)?;
-    } else {
-        let mut output_file = std::fs::File::create(&output_path)?;
-        output_file.write(entry_data)?;
-    }
-
-    Ok(())
-}
-
-fn write_compressed_entry(dat_data: &[u8], output_path: &Path, entry: &TreeEntry) -> io::Result<()> {
+fn write_entry(data: &[u8], output_path: &Path) -> io::Result<()> {
     let mut output_file = std::fs::File::create(&output_path)?;
 
-    if dat_data.len() < 2 {
-        eprintln!("{}: smaller than 2 bytes but marked as compressed: skipping decompression", output_path.to_str().unwrap());
-        output_file.write(dat_data)?;
-    } else if dat_data[0] != 0x78 || dat_data[1] != 0xda {
-        eprintln!("{}: marked as compressed but no magic number: skipping decompression", output_path.to_str().unwrap());
-        output_file.write(dat_data)?;
-    } else {
-        let mut zlib_reader = ZlibDecoder::new(dat_data);
+    // Ignore the `is_compressed` flag and just check for zlib magic number:
+    // because the flag can be incorrect.
+    if data.len() > 2 && data[0] == 0x78 && data[1] != 0xda {
+        let mut zlib_reader = ZlibDecoder::new(data);
         std::io::copy(&mut zlib_reader, &mut output_file)?;
-
-        let decompressed_len = std::fs::metadata(output_path)?.len() as usize;
-        if decompressed_len != entry.decompressed_size {
-            eprintln!("{}: decompressed size ({}) does not match expected decompressed size ({})", output_path.to_str().unwrap(), decompressed_len, entry.decompressed_size);
-        }
+    } else {
+        output_file.write(data)?;
     }
 
     Ok(())
