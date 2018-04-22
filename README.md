@@ -22,10 +22,8 @@ $ fo2dat -xf master.dat -C fo2
 
 **Note**:
 - This utility will decompresses zlib-compressed files when it can; however, typical Fallout 2
-  DAT2 files contain erroneous compression flags. When `fo2dat` cannot be certain that a file is
-  compressed, it skips decompression
-- Most Fallout2 DAT2 files contain duplicate entries, `fo2dat` skips duplicates as they are
-  encountered (i.e. first instance of an entry is extracted, 2nd does not overwrite)
+  DAT2 files seem to flag some files as compressed when they don't appear to be. When `fo2dat`
+  cannot be certain that a file is compressed, it skips decompression
 
 
 # DAT Spec
@@ -100,7 +98,7 @@ Source: http://falloutmods.wikia.com/wiki/DAT_file_format
    |                               .                               |
    |                               .                               |
    |                            filename                           |
-   |                   (ASCII, len = filename_len)                 |
+   |                (ASCII, len = filename_len + 4)                |
    |                               .               ----------------|
    |                               .               | is_compressed |
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -118,3 +116,7 @@ Source: http://falloutmods.wikia.com/wiki/DAT_file_format
   `offset` and ending at `offset + packed_size`
 - `is_compressed` can have a value of either `0x0` (uncompressed) or `0x1`
   (compressed)
+- Filenames are stored in DOS 8.3 format: 8 characters for the file name,
+  followed by a period (`.`), followed by a 3 character long extension.
+- `filename_len` is the length of a filename WITHOUT the period or extension.
+  Therefore, the length of the full ASCII for `filename` is `filename_len + 4`

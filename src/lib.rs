@@ -13,7 +13,9 @@ use std::io::Write;
 use flate2::read::ZlibDecoder;
 
 const DAT_FILE_FOOTER_BYTES: usize = 8;
-const DAT_FILE_MIN_SIZE: usize = DAT_FILE_FOOTER_BYTES;
+const DAT_FILE_MIN_SIZE: usize = DAT_FILE_FOOTER_BYTES + DATA_SECTION_TERMINATOR_LEN;
+
+const DATA_SECTION_TERMINATOR_LEN: usize = 1;
 
 const TREE_ENTRY_HEADER_SIZE: usize = 4;
 const TREE_ENTRY_FOOTER_SIZE: usize = 13;
@@ -82,7 +84,7 @@ pub fn read_tree_entry(data: &[u8]) -> io::Result<(TreeEntry, usize)> {
         return Err(err);
     }
 
-    let filename = match  str::from_utf8(&data[TREE_ENTRY_HEADER_SIZE..filename_len]) {
+    let filename = match  str::from_utf8(&data[TREE_ENTRY_HEADER_SIZE..TREE_ENTRY_HEADER_SIZE+filename_len]) {
         Ok(s) => {
             let mut filename = PathBuf::new();
             for el in s.split(TREE_ENTRY_PATH_SEPARATOR) {
@@ -221,48 +223,53 @@ fn get_data_slice_for_entry<'a>(dat_data: &'a[u8], entry: &TreeEntry) -> io::Res
 }
 
 fn extract_entry(dat_data: &[u8], output_dir: &Path, entry: TreeEntry) -> io::Result<()> {
-    let dat_data = get_data_slice_for_entry(&dat_data, &entry)?;
+    let entry_data = get_data_slice_for_entry(&dat_data, &entry)?;
     let output_path = output_dir.join(&entry.filename);
 
     if let Some(parent) = output_path.parent() {
         if !parent.exists() {
             std::fs::create_dir_all(parent)?;
-            println!("{}", parent.to_str().unwrap());
         }
     }
 
     if output_path.exists() {
         eprintln!("{}: already exists: skipping", output_path.to_str().unwrap());
     } else {
-        write_entry(&dat_data, &output_path, &entry)?;
+        write_entry(&entry_data, &output_path, &entry)?;
     }
 
     Ok(())
 }
 
-fn write_entry(dat_data: &[u8], output_path: &Path, entry: &TreeEntry) -> io::Result<()> {
-    let mut output_file = std::fs::File::create(&output_path)?;
-    println!("{}", output_path.to_str().unwrap());
-
+fn write_entry(entry_data: &[u8], output_path: &Path, entry: &TreeEntry) -> io::Result<()> {
     if entry.is_compressed {
-        write_compressed_entry(&dat_data, output_file, &entry)?;
+        write_compressed_entry(&entry_data, &output_path, &entry)?;
     } else {
-        output_file.write(dat_data)?;
+        let mut output_file = std::fs::File::create(&output_path)?;
+        output_file.write(entry_data)?;
     }
 
     Ok(())
 }
 
-fn write_compressed_entry(dat_data: &[u8], mut output_file: File, entry: &TreeEntry) -> io::Result<()> {
+fn write_compressed_entry(dat_data: &[u8], output_path: &Path, entry: &TreeEntry) -> io::Result<()> {
+    let mut output_file = std::fs::File::create(&output_path)?;
+
     if dat_data.len() < 2 {
-        eprintln!("{}: smaller than 2 bytes but marked as 'compressed' skipping decompression", entry.filename.to_str().unwrap());
+        eprintln!("{}: smaller than 2 bytes but marked as compressed: skipping decompression", output_path.to_str().unwrap());
         output_file.write(dat_data)?;
     } else if dat_data[0] != 0x78 || dat_data[1] != 0xda {
-        eprintln!("{}: marked as compressed but no magic number: not decompressing", entry.filename.to_str().unwrap());
+        eprintln!("{}: marked as compressed but no magic number: skipping decompression", output_path.to_str().unwrap());
         output_file.write(dat_data)?;
     } else {
         let mut zlib_reader = ZlibDecoder::new(dat_data);
         std::io::copy(&mut zlib_reader, &mut output_file)?;
+
+        let decompressed_len = std::fs::metadata(output_path)?.len() as usize;
+        if decompressed_len != entry.decompressed_size {
+            eprintln!("{}: decompressed size ({}) does not match expected decompressed size ({})", output_path.to_str().unwrap(), decompressed_len, entry.decompressed_size);
+        }
     }
+
     Ok(())
 }

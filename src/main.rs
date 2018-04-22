@@ -48,12 +48,14 @@ fn main() {
         if let Err(e) = fo2dat::list_contents(maybe_file.unwrap()) {
             print_and_die(e.description(), 1);
         }
-    } else {
+    } else if should_list {
         let cwd = env::current_dir().unwrap();
         let output_path = matches.value_of("directory").unwrap_or(cwd.to_str().unwrap());
         if let Err(e) = fo2dat::extract(maybe_file.unwrap(), output_path) {
             print_and_die(e.description(), 1);
         }
+    } else {
+        print_and_die("must specify either either '-t' or '-x'", 1);
     }
 }
 
