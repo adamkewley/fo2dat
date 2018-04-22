@@ -16,12 +16,16 @@ script:
 - echo 'panic = "abort"' >> Cargo.toml  # HACK: due to win32 exceptions: see ./cargo-config
 - cargo build --release --target i686-pc-windows-gnu
 
+before_deploy:
+- mv target/i686-pc-windows-gnu/release/fo2dat.exe target/i686-pc-windows-gnu/release/fo2dat-i686.exe
+
 deploy:
+  provider: releases
   on:
     tags: true
-  provider: releases
-  api_key: SI69iJp/8r8DhGxHmh7rqCpqDPbtPfQr26Zvk9cDDswVgIcziwUAD1M0oBCFT7TxERupg5N7Nf11vYN5g7TXPhIP6UXwGNnM2nGqTQp6K4vnvgrJk5ZdtKti97eVTDYlxZj363sZ9Mmn+pPYiiuQzqk7NzfjW2f0P2DXhWgIjgAioMopYF1cMxUN2pQ6NEH6UzNK0sT064A0JpYulIOi9EWhWgAiagsvk2mxvjcvQfyvJooSYU+DPEoDQN8Ly7Xe2PXXNnDeWFgTczcEoIGaAzJtVK6DFfbGq17BIcHh3e8Dy5Qjf4mAWUxY0BmVV4ZIDR5/v08rSGS4Su/vlg/LxNt0cWj1KPXPlWSqzyVGSZV1qDfXGqf7/KE8xM+WQpZLZUSgV3LNsitAjJ3X/0wepdPHniwJXj+vcCfoRd4KZcsKT5wLkSAQwh3smxZ6qEBIumFp6WHNs2nEL/T0cCx9Uw7hFSAMIe9ObSaEK3WecMF9rbX1opYqdPveQsNM4SSQ6k2f4lGOjX0bOWcBZlnkcrXOkEHxP/G40ng/V75wQEP9N2r4EMgcLMp+64pG2zg8suDZtx0nXxWQfD9PRcvuFtgpxNQ80DxgLkq53ju/afVsepeAInPL+NcFJPZPYgTjhBf4GIjuCTZFXk2rpraueYGk++brCPvJtnehdQjIkio=
+  api_key: XG8t2edBcg/NzcmOH0U+oNy7kfl1oc+iyObsuFpP9DkMzkZcNJYvbDga67EAyOD4cleYQdY+i6W0aOPcdZaHsP88ryP+GdxvQz7RoLvkMFkiefpHcZVW52Uvx2ZnaayannCuL44oB5G0s3KsaT4BwtjTXeq6dZmuZqBPR74j4psI2isl0nH7E9eaOkkxzJRQbHApf9pUpQka8zDdmt3ZaQpFePeBHyGxkC1fXFZkYzCPSRnk2yxQVr7nQHUbwBqVdf2GIVKwJfxIwdCTbmlYRDd4K/bG3dCY5a7mkxhXBOGYRzfwwNzTx61XwaxVqNZgFrXLiqX3dOwba618n3KPDJbAEkJ58t1cOANsMjahj+xiF+G77LR/Tro04+nWxTt7owchptkqwaoL7WnrgJ4EqmTEoob6B1QuiSCoKBvmDq+PfyWCtkQUXrSJ2wPpu8y54MeqINL4b9oHd/juNPDvLfcnceRdKoOP/qTNwzUa7QOpKj4waLvMhAqxW9nKHGSpm96TPyPXvYFwcrJrbfIhMHpUZNlgLlfql70QNWrASE4INO228Y0FeQN4ne7965u5vD7n/KcHvia8HkUeewtJ5XfEUkdd8yp2/JBbcK/2r5jCfwf0bJzgMRnrIuetYAAcxHry9vgOCWZ+NIdi+s4XjH6Mh6zJphOUrs9+dlUI0z0=
+  skip_cleanup: true
   file:
   - target/x86_64-unknown-linux-gnu/release/fo2dat
   - target/x86_64-pc-windows-gnu/release/fo2dat.exe
-  - target/i686-pc-windows-gnu/release/fo2dat.exe
+  - target/i686-pc-windows-gnu/release/fo2dat-i686.exe
