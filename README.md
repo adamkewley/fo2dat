@@ -42,8 +42,8 @@ Source: http://falloutmods.wikia.com/wiki/DAT_file_format
    |                             data                              |
    |    len = sum(entry.packed_size for entry in tree_entries)     |
    |                               .                               |
-   |                               .               ----------------|
-   |                               .               |      0x0      |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                           num_files                           |
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
    |                               .                               |
    |                               .                               |
@@ -73,9 +73,10 @@ Source: http://falloutmods.wikia.com/wiki/DAT_file_format
 - The data of all files is concatenated together with no separators
 - The offset and size of each file in `data` is described in the file's respective
   `tree_entry` in `tree_entries`
-- A file's data MAY use zlib compression. Although a file's `tree_entry` contains an `is_compressed` flag,
-  the file's size should be checked (min = 2 bytes) and the file's first two bytes should be checked for
-  the zlib magic number (`0x78da`). If either of those are missing, it's probably not compressed
+- A file's data MAY be compressed with zlib compression. Although a file's `tree_entry` contains an
+  `is_compressed` flag, a file's compression should be checked by testing that the first two bytes
+  of data are the zlib magic number (`0x78da`). If the file is smaller than two bytes, it is not
+  compressed.
 
 
 ## `tree_entries`
@@ -98,11 +99,11 @@ Source: http://falloutmods.wikia.com/wiki/DAT_file_format
    |                               .                               |
    |                               .                               |
    |                            filename                           |
-   |                (ASCII, len = filename_len + 4)                |
+   |                   (ASCII, len = filename_len)                 |
    |                               .               ----------------|
    |                               .               | is_compressed |
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |                        decompressed_size                      |
+   |                       decompressed_size                       |
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
    |                          packed_size                          |
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -115,8 +116,8 @@ Source: http://falloutmods.wikia.com/wiki/DAT_file_format
 - The data of the file is held in `dat_file`s `data` block, starting at
   `offset` and ending at `offset + packed_size`
 - `is_compressed` can have a value of either `0x0` (uncompressed) or `0x1`
-  (compressed)
+  (compressed). For robustness, this flag should be ignored and, instead,
+  the first two bytes of the file data should be read for the zlib magic
+  number (`0x78da`)
 - Filenames are stored in DOS 8.3 format: 8 characters for the file name,
   followed by a period (`.`), followed by a 3 character long extension.
-- `filename_len` is the length of a filename WITHOUT the period or extension.
-  Therefore, the length of the full ASCII for `filename` is `filename_len + 4`

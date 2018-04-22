@@ -11,6 +11,12 @@ use std::str;
 use std::path::PathBuf;
 use std::io::Write;
 use flate2::read::ZlibDecoder;
+use std::io::Error;
+use std::io::ErrorKind;
+
+const ZLIB_FIRST_MAGIC_BYTE: u8 = 0x78;
+const ZLIB_SECOND_MAGIC_BYTE: u8 = 0xda;
+
 
 const DAT_FILE_FOOTER_BYTES: usize = 8;
 const DAT_FILE_MIN_SIZE: usize = DAT_FILE_FOOTER_BYTES + DATA_SECTION_TERMINATOR_LEN;
@@ -181,7 +187,7 @@ fn find_entries(dat_file: &[u8]) -> io::Result<TreeEntryIterator> {
     Ok(read_tree_entries(tree_entries_data))
 }
 
-pub fn extract(dat_path: &str, output_path: &str) -> io::Result<()> {
+pub fn extract_all_entries(dat_path: &str, output_path: &str) -> io::Result<()> {
     let output_path = Path::new(&output_path);
 
     if !output_path.exists() {
@@ -195,32 +201,30 @@ pub fn extract(dat_path: &str, output_path: &str) -> io::Result<()> {
         let err = std::io::Error::new(err_kind, err_msg);
         return Err(err);
     } else {
-        let dat_path = Path::new(&dat_path);
-        let dat_file = mmap_dat(dat_path.to_str().unwrap())?;
-        let tree_entries = find_entries(&dat_file)?;
+        let dat_data = mmap_dat(dat_path)?;
+        let tree_entries = find_entries(&dat_data)?;
 
         for tree_entry in tree_entries {
             let tree_entry = tree_entry?;
-            extract_entry(&dat_file, &output_path, tree_entry)?;
+            extract_entry(&dat_data, &output_path, tree_entry)?;
         }
-
-        Ok(())
     }
+
+    Ok(())
 }
 
 fn get_data_slice_for_entry<'a>(dat_data: &'a[u8], entry: &TreeEntry) -> io::Result<&'a[u8]> {
-    if entry.offset > dat_data.len() {
-        let err_kind = std::io::ErrorKind::InvalidData;
+    let start = entry.offset;
+    let end = entry.offset + entry.packed_size;
+
+    if start > dat_data.len() {
         let err_msg = format!("{}: start offset ({}) is outside of the data's bounds", entry.filename.to_str().unwrap(), entry.offset);
-        let err = std::io::Error::new(err_kind, err_msg);
-        Err(err)
-    } else if entry.offset + entry.packed_size > dat_data.len() {
-        let err_kind = std::io::ErrorKind::InvalidData;
+        Err(Error::new(ErrorKind::InvalidData, err_msg))
+    } else if end > dat_data.len() {
         let err_msg = format!("{}: end index({}) is outside the data's bounds", entry.filename.to_str().unwrap(), entry.offset + entry.packed_size);
-        let err = std::io::Error::new(err_kind, err_msg);
-        Err(err)
+        Err(Error::new(ErrorKind::InvalidData, err_msg))
     } else {
-        Ok(&dat_data[entry.offset..entry.offset+entry.packed_size])
+        Ok(&dat_data[start..end])
     }
 }
 
@@ -229,31 +233,33 @@ fn extract_entry(dat_data: &[u8], output_dir: &Path, entry: TreeEntry) -> io::Re
     let output_path = output_dir.join(&entry.filename);
 
     if let Some(parent) = output_path.parent() {
-        if !parent.exists() {
-            std::fs::create_dir_all(parent)?;
-        }
+        std::fs::create_dir_all(parent)?;
     }
 
     if output_path.exists() {
         eprintln!("{}: already exists: skipping", output_path.to_str().unwrap());
     } else {
-        write_entry(&entry_data, &output_path)?;
+        write_entry_data_to_output(&entry_data, &output_path)?;
     }
 
     Ok(())
 }
 
-fn write_entry(data: &[u8], output_path: &Path) -> io::Result<()> {
-    let mut output_file = std::fs::File::create(&output_path)?;
+fn write_entry_data_to_output(entry_data: &[u8], output_path: &Path) -> io::Result<()> {
+    let mut output_file = File::create(&output_path)?;
 
-    // Ignore the `is_compressed` flag and just check for zlib magic number:
-    // because the flag can be incorrect.
-    if data.len() > 2 && data[0] == 0x78 && data[1] != 0xda {
-        let mut zlib_reader = ZlibDecoder::new(data);
+    if is_zlib_compressed(&entry_data) {
+        let mut zlib_reader = ZlibDecoder::new(entry_data);
         std::io::copy(&mut zlib_reader, &mut output_file)?;
     } else {
-        output_file.write(data)?;
+        output_file.write(entry_data)?;
     }
 
     Ok(())
+}
+
+fn is_zlib_compressed(data: &[u8]) -> bool {
+    data.len() > 2 &&
+        data[0] == ZLIB_FIRST_MAGIC_BYTE &&
+        data[1] == ZLIB_SECOND_MAGIC_BYTE
 }
