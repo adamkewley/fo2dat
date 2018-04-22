@@ -1,6 +1,6 @@
 [package]
 name = "fo2dat"
-version = "0.0.8"
+version = "0.0.9"
 authors = ["Adam Kewley <contact@adamkewley.com>"]
 
 [dependencies]
@@ -11,4 +11,3 @@ flate2 = "1.0.1"
 
 [profile.release]
 lto = true
-panic = "abort"

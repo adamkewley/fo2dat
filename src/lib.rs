@@ -72,10 +72,8 @@ pub fn read_tree_entries(data: &[u8]) -> TreeEntryIterator {
 
 pub fn read_tree_entry(data: &[u8]) -> io::Result<(TreeEntry, usize)> {
     if data.len() < TREE_ENTRY_MIN_SIZE {
-        let err_kind = std::io::ErrorKind::InvalidData;
         let err_msg = format!("remaining tree data is too small to actually fit a tree entry");
-        let err = std::io::Error::new(err_kind, err_msg);
-        return Err(err);
+        return Err(Error::new(ErrorKind::InvalidData, err_msg));
     }
 
     let filename_len =
@@ -99,10 +97,8 @@ pub fn read_tree_entry(data: &[u8]) -> io::Result<(TreeEntry, usize)> {
             Ok(filename)
         },
         Err(_) => {
-            let err_kind = std::io::ErrorKind::InvalidData;
             let err_msg = format!("cannot decode filename as ASCII");
-            let err = std::io::Error::new(err_kind, err_msg);
-            Err(err)
+            Err(Error::new(ErrorKind::InvalidData, err_msg))
         }
     }?;
 
@@ -142,10 +138,8 @@ fn mmap_dat(dat_path_str: &str) -> io::Result<Mmap> {
         let dat_file = File::open(dat_path)?;
         unsafe { Mmap::map(&dat_file) }
     } else {
-        let err_kind = std::io::ErrorKind::NotFound;
         let err_msg = format!("{}: no such file", dat_path_str);
-        let err = std::io::Error::new(err_kind, err_msg);
-        return Err(err);
+        return Err(Error::new(ErrorKind::NotFound, err_msg));
     }
 }
 
@@ -153,30 +147,24 @@ fn find_entries(dat_file: &[u8]) -> io::Result<TreeEntryIterator> {
     let len = dat_file.len();
 
     if len < DAT_FILE_MIN_SIZE {
-        let err_kind = std::io::ErrorKind::InvalidData;
         let err_msg = format!("is too small: must be at least 8 bytes long");
-        let err = std::io::Error::new(err_kind, err_msg);
-        return Err(err);
+        return Err(Error::new(ErrorKind::InvalidData, err_msg));
     }
 
     let file_size =
         LittleEndian::read_u32(&dat_file[len-4..len]) as usize;
 
     if file_size != len {
-        let err_kind = std::io::ErrorKind::InvalidData;
         let err_msg = format!("size on disk ({}) doesn't match size from dat_file size field ({})", len, file_size);
-        let err = std::io::Error::new(err_kind, err_msg);
-        return Err(err);
+        return Err(Error::new(ErrorKind::InvalidData, err_msg));
     }
 
     let tree_size =
         LittleEndian::read_u32(&dat_file[len-8..len-4]) as usize;
 
     if tree_size + DAT_FILE_FOOTER_BYTES > file_size {
-        let err_kind = std::io::ErrorKind::InvalidData;
         let err_msg = format!("size on disk ({}) is too small to fit the tree data ({}) plus footers", len, tree_size);
-        let err = std::io::Error::new(err_kind, err_msg);
-        return Err(err);
+        return Err(Error::new(ErrorKind::InvalidData, err_msg));
     }
 
     let tree_entries_start = len - tree_size - 4;
@@ -187,65 +175,50 @@ fn find_entries(dat_file: &[u8]) -> io::Result<TreeEntryIterator> {
     Ok(read_tree_entries(tree_entries_data))
 }
 
-pub fn extract_all_entries(dat_path: &str, output_path: &str) -> io::Result<()> {
-    let output_path = Path::new(&output_path);
+pub fn extract_all_entries(dat_path: &str, output_dir: &str) -> io::Result<()> {
+    let output_dir = Path::new(&output_dir);
 
-    if !output_path.exists() {
-        let err_kind = std::io::ErrorKind::NotFound;
-        let err_msg = format!("{}: no such directory", output_path.to_str().unwrap());
-        let err = std::io::Error::new(err_kind, err_msg);
-        return Err(err);
-    } else if !output_path.is_dir() {
-        let err_kind = std::io::ErrorKind::InvalidInput;
-        let err_msg = format!("{}: not a directory", output_path.to_str().unwrap());
-        let err = std::io::Error::new(err_kind, err_msg);
-        return Err(err);
+    if !output_dir.exists() {
+        let err_msg = format!("{}: no such directory", output_dir.to_str().unwrap());
+        return Err(Error::new(ErrorKind::NotFound, err_msg));
+    } else if !output_dir.is_dir() {
+        let err_msg = format!("{}: not a directory", output_dir.to_str().unwrap());
+        return Err(Error::new(ErrorKind::InvalidInput, err_msg));
     } else {
         let dat_data = mmap_dat(dat_path)?;
         let tree_entries = find_entries(&dat_data)?;
 
         for tree_entry in tree_entries {
             let tree_entry = tree_entry?;
-            extract_entry(&dat_data, &output_path, tree_entry)?;
+            let entry_data = get_entry_data(&dat_data, &tree_entry)?;
+            let output_path = output_dir.join(&tree_entry.filename);
+            write_data(&entry_data, &output_path)?;
         }
     }
 
     Ok(())
 }
 
-fn get_data_slice_for_entry<'a>(dat_data: &'a[u8], entry: &TreeEntry) -> io::Result<&'a[u8]> {
-    let start = entry.offset;
-    let end = entry.offset + entry.packed_size;
+fn get_entry_data<'a>(dat_data: &'a [u8], entry: &TreeEntry) -> io::Result<&'a [u8]> {
+    let data_start = entry.offset;
+    let data_end = data_start + entry.packed_size;
 
-    if start > dat_data.len() {
-        let err_msg = format!("{}: start offset ({}) is outside of the data's bounds", entry.filename.to_str().unwrap(), entry.offset);
-        Err(Error::new(ErrorKind::InvalidData, err_msg))
-    } else if end > dat_data.len() {
-        let err_msg = format!("{}: end index({}) is outside the data's bounds", entry.filename.to_str().unwrap(), entry.offset + entry.packed_size);
-        Err(Error::new(ErrorKind::InvalidData, err_msg))
-    } else {
-        Ok(&dat_data[start..end])
+    match dat_data.get(data_start..data_end) {
+        Some(entry_data) => {
+            Ok(entry_data)
+        },
+        None => {
+            let err_msg = format!("{}: data range ({}-{}) is out of bounds", entry.filename.to_str().unwrap(), data_start, data_end);
+            Err(Error::new(ErrorKind::InvalidData, err_msg))
+        }
     }
 }
 
-fn extract_entry(dat_data: &[u8], output_dir: &Path, entry: TreeEntry) -> io::Result<()> {
-    let entry_data = get_data_slice_for_entry(&dat_data, &entry)?;
-    let output_path = output_dir.join(&entry.filename);
-
+fn write_data(entry_data: &[u8], output_path: &Path) -> io::Result<()> {
     if let Some(parent) = output_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
 
-    if output_path.exists() {
-        eprintln!("{}: already exists: skipping", output_path.to_str().unwrap());
-    } else {
-        write_entry_data_to_output(&entry_data, &output_path)?;
-    }
-
-    Ok(())
-}
-
-fn write_entry_data_to_output(entry_data: &[u8], output_path: &Path) -> io::Result<()> {
     let mut output_file = File::create(&output_path)?;
 
     if is_zlib_compressed(&entry_data) {
