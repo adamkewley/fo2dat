@@ -82,7 +82,7 @@ pub fn read_tree_entry(data: &[u8]) -> io::Result<(TreeEntry, usize)> {
         return Err(err);
     }
 
-    let filename = match  str::from_utf8(&data[TREE_ENTRY_HEADER_SIZE + 1..filename_len]) {
+    let filename = match  str::from_utf8(&data[TREE_ENTRY_HEADER_SIZE..filename_len]) {
         Ok(s) => {
             let mut filename = PathBuf::new();
             for el in s.split(TREE_ENTRY_PATH_SEPARATOR) {
@@ -130,8 +130,15 @@ pub fn list_contents(dat_path_str: &str) -> io::Result<()> {
 
 fn mmap_dat(dat_path_str: &str) -> io::Result<Mmap> {
     let dat_path = Path::new(&dat_path_str);
-    let dat_file = File::open(dat_path)?;
-    unsafe { Mmap::map(&dat_file) }
+    if dat_path.exists() {
+        let dat_file = File::open(dat_path)?;
+        unsafe { Mmap::map(&dat_file) }
+    } else {
+        let err_kind = std::io::ErrorKind::NotFound;
+        let err_msg = format!("{}: no such file", dat_path_str);
+        let err = std::io::Error::new(err_kind, err_msg);
+        return Err(err);
+    }
 }
 
 fn find_entries(dat_file: &[u8]) -> io::Result<TreeEntryIterator> {
