@@ -1,6 +1,6 @@
 [package]
 name = "fo2dat"
-version = "0.0.9"
+version = "0.0.10"
 authors = ["Adam Kewley <contact@adamkewley.com>"]
 
 [dependencies]
