@@ -7,23 +7,18 @@ A file archiver for Fallout 2 "DAT2" files
 
 ```
 # show help
-$ fo2dat --help
+fo2dat --help
 
 # list contents of master.dat
-$ fo2dat -tf master.dat
+fo2dat -tf master.dat
 
 # extract master.dat into current dir
-$ fo2dat -xf master.dat
+fo2dat -xf master.dat
 
 # extract master.dat into fo2/
-$ mkdir fo2
-$ fo2dat -xf master.dat -C fo2
+mkdir fo2
+fo2dat -xf master.dat -C fo2
 ```
-
-**Note**:
-- This utility will decompresses zlib-compressed files when it can; however, typical Fallout 2
-  DAT2 files seem to flag some files as compressed when they don't appear to be. When `fo2dat`
-  cannot be certain that a file is compressed, it skips decompression
 
 
 # DAT Spec
