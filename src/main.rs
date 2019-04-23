@@ -26,6 +26,7 @@ struct CliArgs {
     action: CliAction,
     file: String,
     ch_dir: String,
+    verbose: bool,
 }
 
 impl CliArgs {
@@ -51,7 +52,11 @@ impl CliArgs {
                 .short("-C")
                 .long("--directory")
                 .help("change to dir before performing any operations")
-                .takes_value(true))
+                 .takes_value(true))
+            .arg(Arg::with_name("verbose")
+                 .short("-v")
+                 .long("--verbose")
+                 .help("verbosely list files processed"))
             .get_matches();
 
         let should_extract = matches.is_present("extract");
@@ -80,7 +85,9 @@ impl CliArgs {
             },
         };
 
-        Ok(CliArgs { action, file, ch_dir })
+        let verbose = matches.is_present("verbose");
+
+        Ok(CliArgs { action, file, ch_dir, verbose })
     }
 }
 
@@ -99,13 +106,13 @@ fn main_internal() -> io::Result<()> {
     let args = CliArgs::parse()?;
 
     match args.action {
-        CliAction::Extract => extract_all_entries(&args.file, &args.ch_dir),
+        CliAction::Extract => extract_all_entries(&args.file, &args.ch_dir, args.verbose),
         CliAction::List => list_entries(&args.file),
     }
 }
 
 /// Extract all entries in a DAT file located at `dat_path` to `output_dir`
-pub fn extract_all_entries(dat_path: &str, output_dir: &str) -> io::Result<()> {
+pub fn extract_all_entries(dat_path: &str, output_dir: &str, verbose: bool) -> io::Result<()> {
     let output_dir = Path::new(&output_dir);
 
     if !output_dir.exists() {
@@ -120,6 +127,11 @@ pub fn extract_all_entries(dat_path: &str, output_dir: &str) -> io::Result<()> {
         for entry_data in fo2dat::iter_data(&data)? {
             let entry_data = entry_data?;
             let output_path = output_dir.join(&entry_data.path);
+
+            if verbose {
+                println!("{}", output_path.to_str().unwrap());
+            }
+            
             write_entry(entry_data.raw_data, &output_path)?;
         }
     }
