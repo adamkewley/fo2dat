@@ -8,6 +8,7 @@ memmap = "0.6.2"
 byteorder = "1.2.2"
 clap = "2.31.2"
 flate2 = "1.0.1"
+num_cpus = "1.0"
 
 [profile.release]
 lto = true

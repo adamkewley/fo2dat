@@ -2,18 +2,21 @@ extern crate fo2dat;
 extern crate clap;
 extern crate memmap;
 extern crate flate2;
+extern crate num_cpus;
 
 use clap::App;
 use clap::Arg;
 use std::env;
 use std::io;
 use std::path::Path;
+use std::path::PathBuf;
 use std::io::ErrorKind;
 use memmap::Mmap;
 use std::fs::File;
 use flate2::read::ZlibDecoder;
 use std::io::Error;
 use std::io::Write;
+use std::sync::Arc;
 
 const APP_NAME: &str = "fo2dat";
 
@@ -27,10 +30,12 @@ struct CliArgs {
     file: String,
     ch_dir: String,
     verbose: bool,
+    num_cpus: usize,
 }
 
 impl CliArgs {
     fn parse() -> io::Result<Self> {
+        let num_cpus = num_cpus::get().to_string();
         let matches = App::new(APP_NAME)
             .about("A Fallout 2 DAT archive utility")
             .arg(Arg::with_name("extract")
@@ -57,6 +62,13 @@ impl CliArgs {
                  .short("-v")
                  .long("--verbose")
                  .help("verbosely list files processed"))
+            .arg(Arg::with_name("jobs")
+                 .short("-j")
+                 .long("--jobs")
+                 .help("number of jobs (effectively, threads) to use in parallel")
+                 .takes_value(true)
+                 .default_value(&num_cpus)
+                 .required(false))
             .get_matches();
 
         let should_extract = matches.is_present("extract");
@@ -87,7 +99,12 @@ impl CliArgs {
 
         let verbose = matches.is_present("verbose");
 
-        Ok(CliArgs { action, file, ch_dir, verbose })
+        let num_cpus = match matches.value_of("jobs").unwrap().parse::<usize>() {
+            Ok(val) => Ok(val),
+            Err(_) => Err(Error::new(ErrorKind::InvalidInput, "must provide numeric arg (-j)")),
+        }?;
+
+        Ok(CliArgs { action, file, ch_dir, verbose, num_cpus })
     }
 }
 
@@ -106,14 +123,14 @@ fn main_internal() -> io::Result<()> {
     let args = CliArgs::parse()?;
 
     match args.action {
-        CliAction::Extract => extract_all_entries(&args.file, &args.ch_dir, args.verbose),
+        CliAction::Extract => extract_all_entries(&args),
         CliAction::List => list_entries(&args.file),
     }
 }
 
 /// Extract all entries in a DAT file located at `dat_path` to `output_dir`
-pub fn extract_all_entries(dat_path: &str, output_dir: &str, verbose: bool) -> io::Result<()> {
-    let output_dir = Path::new(&output_dir);
+fn extract_all_entries(args: &CliArgs) -> io::Result<()> {    
+    let output_dir = PathBuf::from(&args.ch_dir);
 
     if !output_dir.exists() {
         let err_msg = format!("{}: no such directory", output_dir.to_str().unwrap());
@@ -122,18 +139,51 @@ pub fn extract_all_entries(dat_path: &str, output_dir: &str, verbose: bool) -> i
         let err_msg = format!("{}: not a directory", output_dir.to_str().unwrap());
         return Err(Error::new(ErrorKind::InvalidInput, err_msg));
     } else {
-        let data = mmap(dat_path)?;
+        extract_all_entries_to_dir(output_dir, mmap(&args.file)?, args)
+    }
+}
 
-        for entry_data in fo2dat::iter_data(&data)? {
-            let entry_data = entry_data?;
+struct Worker {
+    
+}
+
+struct ThreadPool {
+    workers: Vec<Worker>,
+}
+
+impl ThreadPool {
+    pub fn new(num_cpus: usize) -> io::Result<ThreadPool> {
+        let mut workers = Vec::with_capacity(num_cpus);
+        
+        Ok(ThreadPool{ workers })
+    }
+    
+    pub fn execute<F>(&self, f: F) -> ()
+    where
+        F: FnOnce() + Send + 'static {
+        
+    }
+}
+
+fn extract_all_entries_to_dir(output_dir: PathBuf, data: Mmap, args: &CliArgs) -> io::Result<()> {
+    let pool = ThreadPool::new(args.num_cpus)?;
+    let data = Arc::new(data);
+    let output_dir = Arc::new(output_dir);
+    let verbose = args.verbose;
+    
+    for entry_data in fo2dat::iter_data(&data)? {
+        let data = data.clone();
+        let output_dir = output_dir.clone();
+        pool.execute(move || {
+            let entry_data = entry_data.unwrap();
             let output_path = output_dir.join(&entry_data.path);
 
             if verbose {
                 println!("{}", output_path.to_str().unwrap());
             }
             
-            write_entry(entry_data.raw_data, &output_path)?;
-        }
+            write_entry(entry_data.raw_data, &output_path).unwrap();
+        });
     }
 
     Ok(())
@@ -168,14 +218,14 @@ fn write_entry(entry_data: &[u8], output_path: &Path) -> io::Result<()> {
 }
 
 /// Returns true if `data` appears to be zlib compressed.
-pub fn is_zlib_compressed(data: &[u8]) -> bool {
+fn is_zlib_compressed(data: &[u8]) -> bool {
     const ZLIB_FIRST_MAGIC_BYTE: u8 = 0x78;
     const ZLIB_SECOND_MAGIC_BYTE: u8 = 0xda;
 
     data.len() > 2 && data[0] == ZLIB_FIRST_MAGIC_BYTE && data[1] == ZLIB_SECOND_MAGIC_BYTE
 }
 
-pub fn list_entries(dat_path: &str) -> io::Result<()> {
+fn list_entries(dat_path: &str) -> io::Result<()> {
     let data = mmap(dat_path)?;
 
     for tree_entry in fo2dat::iter_tree(&data)? {
