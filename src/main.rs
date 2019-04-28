@@ -134,8 +134,7 @@ fn extract_all_entries(args: &CliArgs) -> io::Result<()> {
 fn extract_all_entries_to_dir(output_dir: PathBuf, data: Mmap, args: &CliArgs) -> io::Result<()> {
 
     let tree_entries: io::Result<Vec<TreeEntry>> = fo2dat::iter_tree(&data)?.collect();
-    let mut tree_entries = tree_entries?;
-    tree_entries.sort_by(|e1, e2| e1.offset.cmp(&e2.offset));
+    let tree_entries = tree_entries?;
     
     tree_entries.into_par_iter().try_for_each(|tree_entry| {
         let output_path = output_dir.join(&tree_entry.path);
