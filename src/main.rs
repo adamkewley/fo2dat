@@ -2,18 +2,23 @@ extern crate fo2dat;
 extern crate clap;
 extern crate memmap;
 extern crate flate2;
+extern crate rayon;
 
 use clap::App;
 use clap::Arg;
 use std::env;
 use std::io;
 use std::path::Path;
+use std::path::PathBuf;
 use std::io::ErrorKind;
 use memmap::Mmap;
 use std::fs::File;
 use flate2::read::ZlibDecoder;
 use std::io::Error;
 use std::io::Write;
+use fo2dat::TreeEntry;
+use rayon::prelude::*;
+
 
 const APP_NAME: &str = "fo2dat";
 
@@ -106,14 +111,14 @@ fn main_internal() -> io::Result<()> {
     let args = CliArgs::parse()?;
 
     match args.action {
-        CliAction::Extract => extract_all_entries(&args.file, &args.ch_dir, args.verbose),
+        CliAction::Extract => extract_all_entries(&args),
         CliAction::List => list_entries(&args.file),
     }
 }
 
 /// Extract all entries in a DAT file located at `dat_path` to `output_dir`
-pub fn extract_all_entries(dat_path: &str, output_dir: &str, verbose: bool) -> io::Result<()> {
-    let output_dir = Path::new(&output_dir);
+fn extract_all_entries(args: &CliArgs) -> io::Result<()> {    
+    let output_dir = PathBuf::from(&args.ch_dir);
 
     if !output_dir.exists() {
         let err_msg = format!("{}: no such directory", output_dir.to_str().unwrap());
@@ -122,21 +127,28 @@ pub fn extract_all_entries(dat_path: &str, output_dir: &str, verbose: bool) -> i
         let err_msg = format!("{}: not a directory", output_dir.to_str().unwrap());
         return Err(Error::new(ErrorKind::InvalidInput, err_msg));
     } else {
-        let data = mmap(dat_path)?;
-
-        for entry_data in fo2dat::iter_data(&data)? {
-            let entry_data = entry_data?;
-            let output_path = output_dir.join(&entry_data.path);
-
-            if verbose {
-                println!("{}", output_path.to_str().unwrap());
-            }
-            
-            write_entry(entry_data.raw_data, &output_path)?;
-        }
+        extract_all_entries_to_dir(output_dir, mmap(&args.file)?, args)
     }
+}
 
-    Ok(())
+fn extract_all_entries_to_dir(output_dir: PathBuf, data: Mmap, args: &CliArgs) -> io::Result<()> {
+
+    let tree_entries: io::Result<Vec<TreeEntry>> = fo2dat::iter_tree(&data)?.collect();
+    let mut tree_entries = tree_entries?;
+    tree_entries.sort_by(|e1, e2| e1.offset.cmp(&e2.offset));
+    
+    tree_entries.into_par_iter().try_for_each(|tree_entry| {
+        let output_path = output_dir.join(&tree_entry.path);
+        let entry_data = &data[tree_entry.offset..][..tree_entry.packed_size];
+
+        write_entry(&entry_data, &output_path)?;
+
+        if args.verbose {
+            println!("{}", output_path.to_str().unwrap());
+        }
+
+        Ok(())
+    })
 }
 
 fn mmap(dat_path_str: &str) -> io::Result<Mmap> {
@@ -168,14 +180,14 @@ fn write_entry(entry_data: &[u8], output_path: &Path) -> io::Result<()> {
 }
 
 /// Returns true if `data` appears to be zlib compressed.
-pub fn is_zlib_compressed(data: &[u8]) -> bool {
+fn is_zlib_compressed(data: &[u8]) -> bool {
     const ZLIB_FIRST_MAGIC_BYTE: u8 = 0x78;
     const ZLIB_SECOND_MAGIC_BYTE: u8 = 0xda;
 
     data.len() > 2 && data[0] == ZLIB_FIRST_MAGIC_BYTE && data[1] == ZLIB_SECOND_MAGIC_BYTE
 }
 
-pub fn list_entries(dat_path: &str) -> io::Result<()> {
+fn list_entries(dat_path: &str) -> io::Result<()> {
     let data = mmap(dat_path)?;
 
     for tree_entry in fo2dat::iter_tree(&data)? {
