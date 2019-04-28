@@ -144,7 +144,7 @@ fn extract_all_entries_to_dir(output_dir: PathBuf, data: Mmap, args: &CliArgs) -
         write_entry(&entry_data, &output_path)?;
 
         if args.verbose {
-            println!("{:?}", output_path);
+            println!("{}", output_path.to_str().unwrap());
         }
 
         Ok(())
