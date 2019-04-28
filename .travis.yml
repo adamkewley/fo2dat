@@ -1,6 +1,6 @@
 language: rust
 rust:
-- 1.24.0
+- 1.32.0
 before_install:
 - sudo apt-get install mingw-w64
 - rustup target install x86_64-pc-windows-gnu
