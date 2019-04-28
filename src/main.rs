@@ -2,7 +2,7 @@ extern crate fo2dat;
 extern crate clap;
 extern crate memmap;
 extern crate flate2;
-extern crate num_cpus;
+extern crate rayon;
 
 use clap::App;
 use clap::Arg;
@@ -16,7 +16,9 @@ use std::fs::File;
 use flate2::read::ZlibDecoder;
 use std::io::Error;
 use std::io::Write;
-use std::sync::Arc;
+use fo2dat::TreeEntry;
+use rayon::prelude::*;
+
 
 const APP_NAME: &str = "fo2dat";
 
@@ -30,12 +32,10 @@ struct CliArgs {
     file: String,
     ch_dir: String,
     verbose: bool,
-    num_cpus: usize,
 }
 
 impl CliArgs {
     fn parse() -> io::Result<Self> {
-        let num_cpus = num_cpus::get().to_string();
         let matches = App::new(APP_NAME)
             .about("A Fallout 2 DAT archive utility")
             .arg(Arg::with_name("extract")
@@ -62,13 +62,6 @@ impl CliArgs {
                  .short("-v")
                  .long("--verbose")
                  .help("verbosely list files processed"))
-            .arg(Arg::with_name("jobs")
-                 .short("-j")
-                 .long("--jobs")
-                 .help("number of jobs (effectively, threads) to use in parallel")
-                 .takes_value(true)
-                 .default_value(&num_cpus)
-                 .required(false))
             .get_matches();
 
         let should_extract = matches.is_present("extract");
@@ -99,12 +92,7 @@ impl CliArgs {
 
         let verbose = matches.is_present("verbose");
 
-        let num_cpus = match matches.value_of("jobs").unwrap().parse::<usize>() {
-            Ok(val) => Ok(val),
-            Err(_) => Err(Error::new(ErrorKind::InvalidInput, "must provide numeric arg (-j)")),
-        }?;
-
-        Ok(CliArgs { action, file, ch_dir, verbose, num_cpus })
+        Ok(CliArgs { action, file, ch_dir, verbose })
     }
 }
 
@@ -143,50 +131,24 @@ fn extract_all_entries(args: &CliArgs) -> io::Result<()> {
     }
 }
 
-struct Worker {
-    
-}
-
-struct ThreadPool {
-    workers: Vec<Worker>,
-}
-
-impl ThreadPool {
-    pub fn new(num_cpus: usize) -> io::Result<ThreadPool> {
-        let mut workers = Vec::with_capacity(num_cpus);
-        
-        Ok(ThreadPool{ workers })
-    }
-    
-    pub fn execute<F>(&self, f: F) -> ()
-    where
-        F: FnOnce() + Send + 'static {
-        
-    }
-}
-
 fn extract_all_entries_to_dir(output_dir: PathBuf, data: Mmap, args: &CliArgs) -> io::Result<()> {
-    let pool = ThreadPool::new(args.num_cpus)?;
-    let data = Arc::new(data);
-    let output_dir = Arc::new(output_dir);
-    let verbose = args.verbose;
+
+    let tree_entries: io::Result<Vec<TreeEntry>> = fo2dat::iter_tree(&data)?.collect();
+    let mut tree_entries = tree_entries?;
+    tree_entries.sort_by(|e1, e2| e1.offset.cmp(&e2.offset));
     
-    for entry_data in fo2dat::iter_data(&data)? {
-        let data = data.clone();
-        let output_dir = output_dir.clone();
-        pool.execute(move || {
-            let entry_data = entry_data.unwrap();
-            let output_path = output_dir.join(&entry_data.path);
+    tree_entries.into_par_iter().try_for_each(|tree_entry| {
+        let output_path = output_dir.join(&tree_entry.path);
+        let entry_data = &data[tree_entry.offset..][..tree_entry.packed_size];
 
-            if verbose {
-                println!("{}", output_path.to_str().unwrap());
-            }
-            
-            write_entry(entry_data.raw_data, &output_path).unwrap();
-        });
-    }
+        write_entry(&entry_data, &output_path)?;
 
-    Ok(())
+        if args.verbose {
+            println!("{:?}", output_path);
+        }
+
+        Ok(())
+    })
 }
 
 fn mmap(dat_path_str: &str) -> io::Result<Mmap> {
